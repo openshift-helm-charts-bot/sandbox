@@ -1,0 +1,41 @@
+name: Scheduled Software Version Check
+on:
+  # Daily trigger to check updates
+  schedule:
+  - cron: "0 0 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  check-ocp:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Install oc
+        id: install-oc
+        run: |
+          curl -sLO https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz
+          tar zxvf openshift-client-linux.tar.gz oc
+
+      - name: Log into OpenShift Cluster
+        run: |
+          API_SERVER=$(echo -n ${{ secrets.API_SERVER }} | base64 -d)
+          ./oc login --insecure-skip-tls-verify --token=${{ secrets.CLUSTER_TOKEN }} --server=${API_SERVER}
+        shell: bash
+
+      - name: Get OpenShift Version
+        run: |
+          OCP_VERSION=$(./oc version -o json | jq '.openshiftVersion')
+          echo "::set-output name=ocp_version::${OCP_VERSION}"
+        shell: bash
+
+      - name: Check OpenShift Version
+        run: |
+          set -euo pipefail
+          if [ -z "${{ env.OCP_VERSION }}" ]; then
+            # OCP_VERSION is not set, set it to the current ocp version
+            echo "OCP_VERSION not in secrets"
+            echo "OCP_VERSION=4.8.3" >> $GITHUB_ENV
+          else
+            # OCP_VERSION secret is already present, check with the latest version
+            echo "OCP_VERSION in secrets"
+          fi
+        shell: bash
